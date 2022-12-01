@@ -119,10 +119,12 @@ class UartDownloader(object):
             # self.log("Reading: Sector {:x}".format(ss+i))
             data = self.bootItf.ReadSector(ss+i)
             if data:
-                self.log("ReadSector Success: Sector {:x},".format(ss+i) + " Length {:x}".format(len(data)))
-                if len(data) != 0x1000:
+                if len(data) == 0x1000:
+                    self.log("ReadSector Success: Sector {:x},".format(ss+i) + " Length {:x}".format(len(data)))
+                else:
                     self.log("ReadSector Failed: Length not 0x1000 {:x}".format(len(data)))
                     return
+                
                 fileBuf += data
                 if self.pbar:
                     self.pbar.update(1)
