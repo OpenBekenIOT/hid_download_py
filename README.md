@@ -1,58 +1,47 @@
+> ❗ BEWARE <br/>
+> THIS REPO HAS MOVED TO https://github.com/OpenBekenIOT
+
 # What is this?
 
-This repo is a fork of a Beken repo which can program BK7321 series devices over serial using the serial bootloader.
+This repo is a fork of a Beken repo which can program BK7231x series devices over serial (UART / SPI) using the serial bootloader.
 
-It is mostly used to flash our Tasmota replacement on BK7231T/BK7231N, for details see here:
+The HID support has been disabled in this fork. You no longer need to install the required libraries. **Using on Microsoft Windows is therefore easier now**
 
-https://github.com/openshwprojects/OpenBK7231T_App
+Improvements in this repository:
 
-HID has been disabled so that you don't need to find the relevant libraries, to enable easy windows use.
+1. Ability to read out the flash
+2. "Unpackaging" and decrryption of encrypted flash images
+3. Addition of `spiprogram`: this works on a Raspberry Pi using itss native SPI.   
+   See [SPIFlash.md](https://github.com/OpenBekenIOT/hid_download_py/blob/master/SPIFlash.md) and [rpi3install.md](https://github.com/OpenBekenIOT/hid_download_py/blob/master/rpi3install.md)
 
-It has been modified to
+This Python flasher is intended to be used with the OpenBeken project software:
 
-1/ Read flash
+- openshwprojects / [OpenBK7231T_App](https://github.com/openshwprojects/OpenBK7231T_App)
+- openshwprojects / [OpenBK7231N](https://github.com/openshwprojects/OpenBK7231N) – for BK7231<u>N</u>
+- openshwprojects / [OpenBK7231T](https://github.com/openshwprojects/OpenBK7231T) – for BK7231<u>T</u>
 
-2/ unPackage and 'decrypt' a flash image
+# Installation
 
-3/ spiprogram has been added - this works on a Raspberry pi using it's native SPI - see SPIFlash.md and rpi3install.md
+## Debian / Ubuntu
 
-# Detailed examples of flashing Beken chips
-
-Please see our detailed step by step guides for more information:
-
-https://www.elektroda.com/rtvforum/topic3880540.html
-
-https://www.elektroda.com/rtvforum/topic3875654.html
-
-https://www.elektroda.com/rtvforum/topic3874289.html
-
-# Install for Debian/Ubuntu/Linux Mint
-
-## Installation
-
-```
+```bash
 $ apt install python3-hid python3-serial python3-tqdm
 $ python3 setup.py install --user
 ```
 
 ## Windows
 
-* Download hidapi from https://github.com/libusb/hidapi/releases, extrat it to somewhere in windows %PATH%
-* Create a python virtual environment
-
-* run `install.bat` to install the needed packages
-
-
-## SPI Usage
-
-see SPIFlash.md for instructions on how to unbrick devices using a raspberry pi...
-
-
-## HID Usage
-
-(disabled in this repo)
-
+```batch
+pip install hid pyserial tqdm
+python setup.py install
 ```
+
+
+# SPI Usage
+
+(disabled by default in this repo)
+
+```bash
 hidprogram -h
 usage: hidprogram [-h] [-c {bk7231,bk7231s,bk7231u,bk7221u,bk7251}] [-m {soft,hard}] filename
 
@@ -68,11 +57,9 @@ optional arguments:
   -m {soft,hard}, --mode {soft,hard}
 ```
 
+# Uart downloader Usage
 
-
-## Uart downloader Usage
-
-```
+```bash
 usage: uartprogram [-h] [-d DEVICE] [-s STARTADDR] [-l LENGTH] [-b BAUDRATE]
                    [-u] [-r] [-w] [-p]
                    filename
@@ -91,34 +78,45 @@ optional arguments:
   -l LENGTH, --length LENGTH
                         length to read, defaults to 0x1000
   -b BAUDRATE, --baudrate BAUDRATE
-                        burn uart baudrate, defaults to 921600
+                        burn uart baudrate, defaults to 1500000
   -u, --unprotect       unprotect flash first, used by BK7231N
   -r, --read            read flash
-  -w, --write           write flash
+  -w, --write           read flash
   -p, --unpackage       unPackage firmware
 ```
 
-* For chips exclude `BK7231N`, download address defaults to `0x11000`, **don't** set `-u` option.
+_For __BK7231T__: the download start address defaults to `0x11000`. **Do not** set the `--unprotect` option._<br/>
+_For __BK7231N__: set the download start address to `0x0` by passing the argument `-s 0x0`. **Do** set the `--unprotect` option._
 
-* For `BK7231N`, set download address to `0x0`, and **set** `-u` option.
 
-* note that the default baud rate is 921600 - it connects first at 115200, then sends a command to change the baudrate.  So if you get a connection, but then 'Set Baudrate Failed', it could be that your connections/uart are not capable of the default 921600 baud, so try a lower one.  If you get 'write sector failed', this can also be a mis-communication, so lower the baud rate.  Common 'faster' baud rates are 115200, 230400, 460800, 576000, 921600, 1500000.  uartprogram's default used to be 1.5Mbit, but we reduced it to 921600 for better reliability - but this may still be too high for some USB devices & connections.
+_The baud rate can be modified for faster/slower, e.g. `--baudrate 115200` for more reliable with dodgy connections_
 
-## examples:
+## flashing
 
-* baud rate can be modified for faster/slower, e.g. -b 115200 for more reliable with dodgy connections
+Run the following, replacing `<path_to_image.bin>` with the path to your image, and `<COM>` with your serial port number. Re-power the unit or briefly ground CEN (Chip ENable), repeating until the flashing starts.
 
-# flash
+`python uartprogram <path_to_image.bin> --device <COM> --write`
 
-run this, then re-power the unit, repeating until the flashing starts
+## reading
 
-`python uartprogram C:\DataNoBackup\tuya\tuya-iotos-embeded-sdk-wifi-ble-bk7231t\apps\simon_light_pwm_demo\output\1.0.0\simon_light_pwm_demo_UA_1.0.0.bin -d com4 -w`
+Run the following, replacing `<path_to_image.bin>` with the path where you'd like to save the image, and `<COM>` with your serial port number. Re-power the unit or briefly ground CEN (Chip ENable), repeating until the reading starts.
 
-# read
-
-`python uartprogram firmware.bin -d com4 -r`
+`python uartprogram <path_to_image.bin> --device <COM> --read`
 
 # unpackage
 
-`python uartprogram firmware.bin -p`
+Replace `<path_to_image.bin>` with the path to your image.
+
+`python uartprogram <path_to_image.bin> --unpackage`
+
+ # Detailed examples of flashing Beken chips
+
+Please see our detailed step by step guides for more information:
+
+[LED WiFi RGBCW Tuya - teardown, BK7231N, programming with my Tasmota replacement](https://www.elektroda.com/rtvforum/topic3880540.html)<br/>
+[Garden Tuya CCWFIO232PK Double Relay - BK7231T - Programming](https://www.elektroda.com/rtvforum/topic3875654.html)<br/>
+[Qiachip Smart Switch - BK7231N / CB2S - interior, programming](https://www.elektroda.com/rtvforum/topic3874289.html)<br/>
+
+
+
 

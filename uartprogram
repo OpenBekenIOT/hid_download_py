@@ -4,34 +4,36 @@
 # HID Download Tool
 #
 # Copyright (c) BekenCorp. (chunjian.tian@bekencorp.com).  All rights reserved.
+# Copyright (c) 2022 OpenBekenIOT.
 #
 # This software may be distributed under the terms of the BSD license.
-# See README for more details.
+# See README.md for more details.
 
 import sys
 import os
 import argparse
 from bkutils import UartDownloader
 from bkutils import Unpackager
-# import hid
+### Disabling HID support to simplify installation
+# import hid 
 import threading
 
 # parse commandline arguments
 def parse_args():
-    description = '''Beken Uart Downloader.'''
+    description = '''Beken UART Up- and Downloader.'''
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('-d', '--device',
                         default='/dev/ttyUSB0',
-                        help="Uart device, default /dev/ttyUSB0")
+                        help="Serial device, default /dev/ttyUSB0. COM* for Windows")
     parser.add_argument('-s', '--startaddr', type=lambda  x: int(x, 16),
                         default=0x11000,
-                        help="burn flash address, defaults to 0x11000")
+                        help="burn flash address, defaults to 0x11000. Set to 0x0 for BK7231N")
     parser.add_argument('-l', '--length', type=lambda  x: int(x, 16),
                         default=0x119000,
-                        help="length to read, defaults to 0x119000")
+                        help="length to read in HEX, defaults to 0x119000 (1124 KiB). eg. 0x1F4000 = 2048KiB")
     parser.add_argument('-b', '--baudrate', type=int,
                         default=921600,
-                        help="burn uart baudrate, defaults to 921600")
+                        help="UART baudrate, defaults to 921600")
     parser.add_argument('-u', '--unprotect', action="store_true",
                         help="unprotect flash first, used by BK7231N")
     parser.add_argument('-r', '--read', action="store_true",
@@ -39,9 +41,9 @@ def parse_args():
     parser.add_argument('-w', '--write', action="store_true",
                         help="write flash")
     parser.add_argument('-p', '--unpackage', action="store_true",
-                        help="unPackage firmware")
+                        help="unPackage image")
     parser.add_argument('filename',
-                        help='specify file_crc.bin')
+                        help='path to image to read/write, REQUIRED')
     args = parser.parse_args()
 
     return args
@@ -49,11 +51,11 @@ def parse_args():
 args = parse_args()
 
 if args.unpackage:
-    Unpackager(args.filename, args.filename + '.unpackage.bin')
+    Unpackager(args.filename, args.filename + '.unpackaged.bin')
 else:
     downloader = UartDownloader(args.device, args.baudrate, args.unprotect)
+    
     if args.read:
         downloader.read(args.filename, args.startaddr, args.length)
-    else:
-        if args.write:
-            downloader.programm(args.filename, args.startaddr)
+    elif args.write:
+        downloader.programm(args.filename, args.startaddr)

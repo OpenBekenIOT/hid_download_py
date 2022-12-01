@@ -111,27 +111,28 @@ class UartDownloader(object):
 
         # Step: Read data
         i = 0
-        ss = startAddr & 0xfffff000     # 4K对齐的地址
+        ss = startAddr & 0xfffff000     # 4K aligned address (translated)
         self.log("len: {:x}".format(length))
         self.log("startAddr: {:x}".format(ss))
         
         while i < length:
-            self.log("Reading {:x}".format(ss+i))
+            # self.log("Reading: Sector {:x}".format(ss+i))
             data = self.bootItf.ReadSector(ss+i)
             if data:
-                self.log("ReadSector Success {:x}".format(ss+i) + " len {:x}".format(len(data)))
-                if len(data) != 0x1000:
-                    self.log("ReadSector Failed, len not 0x1000 {:x}".format(len(data)))
+                if len(data) == 0x1000:
+                    self.log("ReadSector Success: Sector {:x},".format(ss+i) + " Length {:x}".format(len(data)))
+                else:
+                    self.log("ReadSector Failed: Length not 0x1000 {:x}".format(len(data)))
                     return
+                
                 fileBuf += data
                 if self.pbar:
                     self.pbar.update(1)
             else:
                 #self.pbar.close()
-                self.log("ReadSector Failed {:x}".format(ss+i))
+                self.log("ReadSector Failed: {:x}".format(ss+i))
                 return
             i += 0x1000
-            self.log(i)
 
         #self.pbar.close()
         self.pbar = None
@@ -140,6 +141,7 @@ class UartDownloader(object):
             self._Do_Boot_ProtectFlash(mid, False)
 
         success, crc = self.bootItf.ReadCRC(startAddr, ss+i)
+        self.log("----- CRC check ------")
         self.log("CRC should be {:x}".format(crc))
         fileCrc = crc32_ver2(0xffffffff, fileBuf)
         self.log("CRC is {:x}".format(fileCrc))
@@ -148,12 +150,14 @@ class UartDownloader(object):
             f = open(filename, "wb")
             f.write(fileBuf)
             f.close()
+            self.log("--- CRC check PASSED ---")
             self.log("Wrote {:x} bytes to ".format(i) + filename)
         else:
             f = open(filename, "wb")
             f.write(fileBuf)
             f.close()
-            self.log("CRC check failed")
+            self.log("--- CRC check FAILED. ---")
+            self.log("If device is a BK7231N, ignore this error.")
             self.log("Wrote {:x} bytes to ".format(i) + filename)
 
         return
@@ -184,7 +188,7 @@ class UartDownloader(object):
         # time.sleep(0.1)
         self.pbar = tqdm(total=total_num, ascii=True, ncols=80, unit_scale=True,
                 unit='k', bar_format='{desc}|{bar}|[{rate_fmt:>8}]')
-        self.log("Getting Bus...")
+        self.log("Getting Bus... (waiting for connection)")
         timeout = Timeout(10)
 
         # Step2: Link Check
@@ -194,7 +198,7 @@ class UartDownloader(object):
             if r:
                 break
             if timeout.expired():
-                self.log('Cannot get bus.')
+                self.log('Cannot get bus. (cannot connect)')
                 self.pbar.close()
                 return
             count += 1
@@ -203,7 +207,7 @@ class UartDownloader(object):
                 count = 0
             # time.sleep(0.01)
 
-        self.log("Gotten Bus...")
+        self.log("Gotten Bus... (connected)")
         time.sleep(0.01)
         self.bootItf.Drain()
 
@@ -227,7 +231,7 @@ class UartDownloader(object):
         # Step4: erase
         # Step4.1: read first 4k if startAddr not aligned with 4K
         eraseAddr = startAddr
-        ss = s0 = eraseAddr & 0xfffff000     # 4K对齐的地址
+        ss = s0 = eraseAddr & 0xfffff000     # 4K aligned address (translated)
         filSPtr = 0
 
         if eraseAddr & 0xfff:
@@ -240,7 +244,7 @@ class UartDownloader(object):
             buf[eraseAddr&0xfff:eraseAddr&0xfff+fl] = pfile[:fl]
             self.bootItf.EraseBlock(0x20, s0)
             if not self.bootItf.WriteSector(s0, buf):
-                self.log("WriteSector Failed")
+                self.log("WriteSector FAILED")
                 self.pbar.close()
                 return
             filOLen -= fl
@@ -255,7 +259,7 @@ class UartDownloader(object):
 
         # Step4.2: handle the last 4K
         # now ss is the new eraseAddr.
-        # 文件结束地址
+        # file end address (translated)
         filEPtr = fileLen
         s1 = eraseAddr + fileLen
 
@@ -276,7 +280,7 @@ class UartDownloader(object):
             #    print(tt)
             #print(time.time())
             if not self.bootItf.WriteSector(s1&0xfffff000, buf):
-                self.log("WriteSector Failed")
+                self.log("WriteSector FAILED")
                 self.pbar.close()
                 return
             # print(time.time())
@@ -289,7 +293,7 @@ class UartDownloader(object):
 
         # print("Handle file end done")
 
-        # Step4.3: 对齐64KB，如果擦除区域小于64KB
+        # Step4.3: Aligned to 64KB, if the erased area is smaller than 64KB (translated)
         len1 = ss + filOLen
         len0 = s0 & 0xffff0000
         if s0 & 0xffff:
@@ -301,15 +305,15 @@ class UartDownloader(object):
 
         # print("fileOLen: {}, filSPtr: {}".format(filOLen, filSPtr))
         # Step4.4: Erase 64k, 4k, etc.
-        # 按照64KB/4K block擦除
+        # Erase according to 64KB/4K block (translated)
         len1 = ss + filOLen
         while s0 < len1:
             self.log("Erasing")
             rmn = len1 - s0
-            if rmn > 0x10000:   # 64K erase
+            if rmn > 0x10000:                       # 64K erase
                 self.bootItf.EraseBlock(0xd8, s0)
                 s0 = s0+0x10000
-            else:       # erase 4K
+            else:                                   # erase 4K
                 self.bootItf.EraseBlock(0x20, s0)
                 s0 = s0 + 0x1000
 
@@ -323,7 +327,7 @@ class UartDownloader(object):
                     self.pbar.update(1)
                     break
             else:
-                self.log("WriteSector 1 Failed")
+                self.log("WriteSector {:x} FAILED".format(1))
                 self.pbar.close()
                 return
             i += 0x1000
